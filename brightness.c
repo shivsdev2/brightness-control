@@ -10,15 +10,15 @@
 #include <stdio.h>
 #include <systemd/sd-bus.h>
 #include <string.h>
-
+#include <stdint.h>
 
 int main(void){
 
     sd_bus *bus = NULL;
     int r;
-    sd_bus_open_system(&bus);
     unsigned int max_brightness; 
-
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    r = sd_bus_open_system(&bus);
     if (r < 0) {
         fprintf(stderr, "Failed to connect to system bus: %s\n", strerror(-r));
         return 1;
@@ -46,19 +46,31 @@ int main(void){
     * https://www.freedesktop.org/software/systemd/man/latest/sd_bus_call_method.html#
     */
 
-    sd_bus_call_method(
+    r = sd_bus_call_method(
         bus,
         "org.freedesktop.login1",
         "/org/freedesktop/login1/session/auto",
         "org.freedesktop.login1.Session",   
         "SetBrightness",                     
-        NULL,                            
+        &error,                            
         NULL,                               
         "ssu",                                                     
-        "backlight", "intel_backlight", user_brightness
+        "backlight", 
+        "intel_backlight", 
+        (uint32_t)user_brightness
+
 
     );
 
+    if (r < 0) {
+        fprintf(stderr, "Failed to issue method call: %s\n", error.message);
+        sd_bus_error_free(&error);
+        sd_bus_unref(bus);
+        return 1;
+    }
+
+
+    sd_bus_error_free(&error);
     sd_bus_unref(bus);
     return 0;
 
