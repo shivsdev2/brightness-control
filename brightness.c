@@ -59,6 +59,7 @@ int main(void){
 
     );
 
+    sd_bus_unref(bus);
     return 0;
 
 }
