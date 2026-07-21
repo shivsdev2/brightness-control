@@ -1,0 +1,3 @@
+Pretty self explanatory, 
+A really basic tool in C, for controlling brightness of your screen. 
+It changes the brightness via D-bus, reading maximum brightness from sys file.
