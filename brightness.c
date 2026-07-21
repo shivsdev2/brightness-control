@@ -25,8 +25,19 @@ int main(void){
     }
 
     int user_brightness;
-    printf("Enter the brightness," );
-    scanf("%d", &user_brightness);
+    printf("Enter the brightness: " );
+
+    if (scanf("%d", &user_brightness) != 1) {
+        fprintf(stderr, "Brightness cannot be non integer.");
+        sd_bus_unref(bus);
+        return 1;
+    }
+
+    if (user_brightness < 0) {
+        fprintf(stderr, "Error: Brightness cannot be negative (%d).\n", user_brightness);
+        sd_bus_unref(bus);
+        return 1;
+    }
 
     FILE *f = fopen("/sys/class/backlight/intel_backlight/max_brightness", "r");
     if (f != NULL) {
@@ -34,6 +45,7 @@ int main(void){
             if (user_brightness > max_brightness) {
                 fprintf(stderr, "Error: brightness exceeds maximum brightness %u\n", max_brightness);
                 fclose(f);
+                sd_bus_unref(bus);
                 return 1;
             }
         }
