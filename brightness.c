@@ -167,9 +167,9 @@ int select_backlight_device(BacklightDevice *devices, int count) {
 }
 
 /*
- * Read current brightness from a specific backlight device
+ * Read current brightness from a specific backlight device via sysfs
  */
-int read_current_brightness(const char *device_name, unsigned int *current_brightness) {
+int read_current_brightness_sysfs(const char *device_name, unsigned int *current_brightness) {
     char path[MAX_DEVICE_NAME_LEN + 64];
     FILE *f;
     
@@ -186,6 +186,45 @@ int read_current_brightness(const char *device_name, unsigned int *current_brigh
     }
     
     fclose(f);
+    return 0;
+}
+
+/*
+ * Get current brightness via D-Bus (systemd login1)
+ * Returns 0 on success, -1 on failure
+ */
+int get_brightness_dbus(sd_bus *bus, const char *device_name, unsigned int *current_brightness) {
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *reply = NULL;
+    int r;
+    
+    r = sd_bus_call_method(
+        bus,
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1/session/auto",
+        "org.freedesktop.login1.Session",
+        "GetBrightness",
+        &error,
+        &reply,
+        "s",
+        "backlight",
+        device_name
+    );
+    
+    if (r < 0) {
+        fprintf(stderr, "Failed to get brightness via D-Bus: %s\n", error.message);
+        sd_bus_error_free(&error);
+        return -1;
+    }
+    
+    r = sd_bus_message_read(reply, "u", current_brightness);
+    if (r < 0) {
+        fprintf(stderr, "Failed to parse D-Bus reply: %s\n", strerror(-r));
+        sd_bus_message_unref(reply);
+        return -1;
+    }
+    
+    sd_bus_message_unref(reply);
     return 0;
 }
 
@@ -318,7 +357,18 @@ int main(int argc, char *argv[]){
     /* Get mode: just show current brightness and exit */
     if (get_mode) {
         unsigned int current_b = 0;
-        if (read_current_brightness(devices[selected_device].name, &current_b) == 0) {
+        r = sd_bus_open_system(&bus);
+        if (r >= 0) {
+            /* Try D-Bus first */
+            if (get_brightness_dbus(bus, devices[selected_device].name, &current_b) == 0) {
+                printf("Current brightness: %u (max: %u)\n", current_b, max_brightness);
+                sd_bus_unref(bus);
+                return 0;
+            }
+            sd_bus_unref(bus);
+        }
+        /* Fall back to sysfs */
+        if (read_current_brightness_sysfs(devices[selected_device].name, &current_b) == 0) {
             printf("Current brightness: %u (max: %u)\n", current_b, max_brightness);
         } else {
             fprintf(stderr, "Failed to read current brightness from %s\n", devices[selected_device].name);
